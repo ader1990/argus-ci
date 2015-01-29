@@ -105,7 +105,8 @@ class BaseArgusScenario(object):
 
     def __init__(self, test_classes, recipe=None,
                  userdata=None, metadata=None,
-                 image=None, service_type=None, result=None):
+                 image=None, service_type=None,
+                 result=None, is_enabled=True):
         self._recipe = recipe
         self._userdata = userdata
         self._metadata = metadata
@@ -121,8 +122,9 @@ class BaseArgusScenario(object):
         self._result = result or unittest.TestResult()
         self._image = image
         self._service_type = service_type
+        self.is_enabled = is_enabled
 
-    def _prepare_run(self):
+    def prepare_run(self):
         # pylint: disable=attribute-defined-outside-init
         self._isolated_creds = credentials.get_isolated_credentials(
             self.__class__.__name__, network_resources={})
@@ -239,7 +241,7 @@ class BaseArgusScenario(object):
                                                 secgroup['name'])
         return secgroup
 
-    def _setup(self):
+    def setup(self):
         # pylint: disable=attribute-defined-outside-init
         LOG.info("Creating server...")
         if self._userdata:
@@ -256,9 +258,9 @@ class BaseArgusScenario(object):
             meta=self._metadata)
         self._floating_ip = self._assign_floating_ip()
         self._security_group = self._create_security_groups()
-        self._prepare_instance()
+        self.prepare_instance()
 
-    def _save_instance_output(self):
+    def save_instance_output(self):
         # check CLI arguments
         opts = util.parse_cli()
         out_dir = opts.instance_output
@@ -288,7 +290,7 @@ class BaseArgusScenario(object):
         with open(path, "wb") as stream:
             stream.write(content)
 
-    def _cleanup(self):
+    def cleanup(self):
         LOG.info("Cleaning up...")
 
         if self._security_groups_rules:
@@ -321,13 +323,13 @@ class BaseArgusScenario(object):
         It will return a list of test results.
         """
 
-        self._prepare_run()
+        self.prepare_run()
 
         try:
             # prepare the instance
-            self._setup()
+            self.setup()
             # save the output
-            self._save_instance_output()
+            self.save_instance_output()
             # run the tests
             LOG.info("Running tests...")
             testloader = unittest.TestLoader()
@@ -341,9 +343,9 @@ class BaseArgusScenario(object):
                                              image=self._image))
             return suite.run(self._result)
         finally:
-            self._cleanup()
+            self.cleanup()
 
-    def _prepare_instance(self):
+    def prepare_instance(self):
         if self._recipe is None:
             raise exceptions.ArgusError('recipe must be set')
 
@@ -416,6 +418,80 @@ class BaseWindowsScenario(BaseArgusScenario):
                                     transport_protocol=protocol)
 
     remote_client = util.cached_property(get_remote_client, 'remote_client')
+
+
+class RescueWindowsScenario(BaseWindowsScenario):
+    """Instance rescue Windows-based scenario."""
+
+    def __init__(self, **kwargs):
+        super(BaseWindowsScenario, self).__init__(**kwargs)
+
+    def rescue_server(self):
+        self._servers_client.rescue_server(self._server['id'], adminPass="Passw0rd")
+        self._servers_client.wait_for_server_status(self._server['id'], 'RESCUE')
+
+    def unrescue_server(self):
+        self._servers_client.unrescue_server(self._server['id'])
+        self._servers_client.wait_for_server_status(self._server['id'], 'ACTIVE')
+
+    def run_test_suite(self, testloader):
+        suite = unittest.TestSuite()
+        for test_class in self._test_classes:
+            testnames = testloader.getTestCaseNames(test_class)
+            for name in testnames:
+                suite.addTest(test_class(name,
+                                         manager=self,
+                                         service_type=self._service_type,
+                                         image=self._image))
+        self._result = unittest.TestResult()
+        return suite.run(self._result)
+
+    def run(self):
+        """Run the tests from the underlying test class.
+
+        This will start a new instance and prepare it using the recipe.
+        It will return a list of test results.
+        """
+
+        self.prepare_run()
+
+        try:
+            # prepare the instance
+            self.setup()
+            # save the output
+            self.save_instance_output()
+
+            # run the tests
+            LOG.info("Running tests...")
+
+            testloader = unittest.TestLoader()
+            LOG.debug("Running the first tests, before rescue.")
+            res = self.run_test_suite(testloader)
+            LOG.debug(res)
+            LOG.debug(self._result)
+
+            LOG.debug("Running the second tests, after rescue.")
+            self.rescue_server()
+            self.prepare_instance()
+            self.save_instance_output()
+
+            res = self.run_test_suite(testloader)
+            LOG.debug(res)
+            LOG.debug(self._result)
+
+            LOG.debug("Running the third tests, after unrescue.")
+            self.unrescue_server()
+            import time
+            time.sleep(100)
+            return self.run_test_suite(testloader)
+        except:
+            LOG.debug("Smth failed")
+            import sys, traceback
+            LOG.debug("".join(traceback.format_exception(*sys.exc_info())))
+            raise
+        finally:
+            self.cleanup()
+
 
 
 class BaseArgusTest(unittest.TestCase):

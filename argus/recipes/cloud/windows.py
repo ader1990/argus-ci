@@ -224,16 +224,17 @@ class WindowsCloudbaseinitRecipe(base.BaseCloudbaseinitRecipe):
 
     def wait_reboot(self):
         """Do a reboot and wait until the instance is up."""
+        pass
 
-        LOG.info('Waiting for server status SHUTOFF because of sysprep...')
-        self._api_manager.servers_client.wait_for_server_status(
-            server_id=self._instance_id,
-            status='SHUTOFF',
-            extra_timeout=600)
+        #LOG.info('Waiting for server status SHUTOFF because of sysprep...')
+        #self._api_manager.servers_client.wait_for_server_status(
+        #    server_id=self._instance_id,
+        #    status='SHUTOFF',
+        #    extra_timeout=600)
 
-        self._api_manager.servers_client.start(self._instance_id)
+        #self._api_manager.servers_client.start(self._instance_id)
 
-        LOG.info('Waiting for server status ACTIVE...')
-        self._api_manager.servers_client.wait_for_server_status(
-            server_id=self._instance_id,
-            status='ACTIVE')
+        #LOG.info('Waiting for server status ACTIVE...')
+        #self._api_manager.servers_client.wait_for_server_status(
+        #    server_id=self._instance_id,
+        #    status='ACTIVE')

@@ -20,6 +20,9 @@ from argus.tests.cloud import util as test_util
 CONF = util.get_config()
 DNSMASQ_NEUTRON = '/etc/neutron/dnsmasq-neutron.conf'
 
+# Use this logger to log both to standard output and to argus log file.
+LOG = util.get_logger(name=__name__, format_string='%(message)s')
+LOG.propagate = False
 
 def _get_dhcp_value(key):
     """Get the value of an override from the dnsmasq-config file.
@@ -41,16 +44,32 @@ class PasswordSmokeTest(scenario.BaseArgusTest):
     @test_util.requires_service('http')
     def test_password_set(self):
         # Test that the proper password was set.
-        remote_client = self.manager.get_remote_client(
-            self.image.created_user,
-            self.manager.instance_password())
+
         # Pylint emits properly this error, but it doesn't understand
         # that this class is used as a mixin later on (and will
         # never understand these cases). So it's okay to disable
         # the message here.
         # pylint: disable=no-member
-
-        stdout = remote_client.run_command_verbose("echo 1")
+        LOG.debug("Trying to connect using the basic password")
+        current_try = 0
+        max_retries = 10
+        retry_interval = 30 #seconds
+        stdout = None
+        while current_try < max_retries:
+            try:
+                remote_client = self.manager.get_remote_client(
+                                                        self.image.created_user,
+                                                        self.manager.instance_password())
+                stdout = remote_client.run_command_verbose("echo 1")
+                if '1' == stdout.strip():
+                    break
+            except:
+                LOG.debug("Failed to run command")
+            finally:
+                import time
+                time.sleep(retry_interval)
+                current_try = current_try + 1
+        LOG.debug("Assertion is performed")
         self.assertEqual('1', stdout.strip())
 
 
@@ -75,7 +94,9 @@ class BaseSmokeTests(PasswordSmokeTest,
     def test_disk_expanded(self):
         # Test the disk expanded properly.
         image = self.manager.get_image_ref()
-        datastore_size = image[1]['OS-EXT-IMG-SIZE:size']
+        LOG.debug(image)
+        LOG.debug(image['OS-EXT-IMG-SIZE:size'])
+        datastore_size = image['OS-EXT-IMG-SIZE:size']
         disk_size = self.introspection.get_disk_size()
         self.assertGreater(disk_size, datastore_size)
 

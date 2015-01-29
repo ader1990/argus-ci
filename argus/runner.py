@@ -179,6 +179,14 @@ def _filter_scenarios(scenarios):
     if scenario_type:
         scenarios = [scenario for scenario in scenarios
                      if scenario.type and scenario.type == scenario_type]
+
+    # Filter by is_enabled
+    scenarios = [scenario for scenario in scenarios
+                 if scenario.is_enabled == True]
+
+#    print scenarios
+#    exit()
+
     return scenarios
 
 

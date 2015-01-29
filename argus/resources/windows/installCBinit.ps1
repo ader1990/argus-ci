@@ -91,6 +91,7 @@ try
     {
         setService $programFilesDir
     }
+    cmd.exe /c 'sc config cloudbase-init start= delayed-auto'
 }
 
 catch

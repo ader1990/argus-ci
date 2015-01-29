@@ -34,6 +34,13 @@ def _get_default(parser, section, option, default=None):
     except six.moves.configparser.NoOptionError:
         return default
 
+def _get_default_bool(parser, section, option, default=None):
+        val = _get_default(parser, section, option, default=None)
+        if(val == 'False'):
+            val = False
+        elif (val == 'True'):
+            val = True
+        return val
 
 def parse_config(filename):
     """Parse the given config file.
@@ -57,7 +64,7 @@ def parse_config(filename):
     scenario = collections.namedtuple('scenario',
                                       'name scenario test_classes recipe '
                                       'userdata metadata image type '
-                                      'service_type')
+                                      'service_type is_enabled')
     conf = collections.namedtuple('conf',
                                   'argus cloudbaseinit images scenarios')
 
@@ -67,8 +74,8 @@ def parse_config(filename):
     # Get the argus section
     resources = _get_default(
         parser, 'argus', 'resources',
-        'https://raw.githubusercontent.com/PCManticore/'
-        'argus-ci/master/argus/resources')
+        'https://raw.githubusercontent.com/ader1990/'
+        'argus-ci/develop/argus/resources')
     debug = parser.getboolean('argus', 'debug')
     path_to_private_key = parser.get('argus', 'path_to_private_key')
     file_log = _get_default(parser, 'argus', 'file_log')
@@ -129,8 +136,9 @@ def parse_config(filename):
         image = images_names[parser.get(key, 'image')]
         scenario_type = _get_default(parser, key, 'type')
         service_type = _get_default(parser, key, 'service_type', 'http')
+        is_enabled = _get_default_bool(parser, key, 'is_enabled', True)
         scenarios.append(scenario(scenario_name, scenario_class, test_classes,
                                   recipe, userdata, metadata, image,
-                                  scenario_type, service_type))
+                                  scenario_type, service_type, is_enabled))
 
     return conf(argus, cloudbaseinit, images, scenarios)
